@@ -438,7 +438,9 @@ class NXController(object):
 
     @property
     def interior_bypassed(self):
-        return all(['Inhibit' in x.condition_flags
+        # Stay mode bypasses the interior zones (this bit was labelled
+        # 'Inhibit' before the zone STATUS_FLAGS fix).
+        return all(['Bypass' in x.condition_flags
                     for x in self.interior_zones])
 
     def process_next(self):
@@ -567,6 +569,10 @@ class NXController(object):
         zone.condition_flags = []
         for index, string in enumerate(model.Zone.STATUS_FLAGS):
             if condition & (1 << index):
+                zone.condition_flags.append(string)
+        condition2 = frame.data[6] if len(frame.data) > 6 else 0
+        for index, string in enumerate(model.Zone.STATUS_FLAGS_2):
+            if condition2 & (1 << index):
                 zone.condition_flags.append(string)
 
         zone.type_flags = []

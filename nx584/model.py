@@ -68,9 +68,14 @@ MSG_TYPES = [
 
 
 class Zone(object):
+    # Zone status message (0x04), zone condition flags (1), bits 0-7. Bit 1 is
+    # Tampered; without it every later flag was reported one bit low
+    # ('Bypass' was the panel's Trouble bit, 'Inhibit' its Bypassed bit).
     STATUS_FLAGS = [
-        'Faulted', 'Trouble', 'Bypass', 'Inhibit', 'Low battery',
+        'Faulted', 'Tampered', 'Trouble', 'Bypass', 'Inhibit', 'Low battery',
         'Loss of supervision', 'Reserved',]
+    # Zone condition flags (2), the next byte.
+    STATUS_FLAGS_2 = ['Alarm memory', 'Bypass memory']
 
     TYPE_FLAGS = [
         ['Fire', '24 hour', 'Key-switch', 'Follower',

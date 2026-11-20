@@ -189,3 +189,56 @@ class TestController(unittest.TestCase):
     def test_receive_binary(self):
         buf = self._test_receive(True)
         print('Test buffer is %r' % list(buf))
+
+
+class TestZoneStatus(unittest.TestCase):
+    """Zone status message (0x04): data = zone - 1, partition mask, 3 zone type
+    bytes, condition flags (1), condition flags (2). Bit layout from the NX-584
+    protocol (condition 1: faulted, tampered, trouble, bypassed, inhibited,
+    low battery, loss of supervision; condition 2: alarm memory, bypass
+    memory)."""
+
+    def setUp(self):
+        with mock.patch('stevedore.extension.ExtensionManager'):
+            with tempfile.NamedTemporaryFile() as f:
+                self.ctrl = controller.NXController('fakeport', f.name)
+
+    def _zone(self, cond1, cond2=0, types=(0, 0, 0)):
+        frame = controller.NXFrame()
+        frame.data = [45, 1, types[0], types[1], types[2], cond1, cond2]
+        self.ctrl.process_msg_4(frame)
+        return self.ctrl.zones[46]
+
+    def test_each_condition_bit(self):
+        names = ['Faulted', 'Tampered', 'Trouble', 'Bypass', 'Inhibit',
+                 'Low battery', 'Loss of supervision']
+        for bit, name in enumerate(names):
+            zone = self._zone(1 << bit)
+            self.assertEqual([name], zone.condition_flags)
+
+    def test_trouble_is_not_bypassed(self):
+        # The panel's Trouble bit (2) used to be reported as 'Bypass'.
+        zone = self._zone(0x01 | 0x04)
+        self.assertEqual(['Faulted', 'Trouble'], zone.condition_flags)
+        self.assertFalse(zone.bypassed)
+
+    def test_bypassed_and_inhibited(self):
+        self.assertTrue(self._zone(0x08).bypassed)
+        self.assertTrue(self._zone(0x10).bypassed)
+
+    def test_condition_flags_2(self):
+        zone = self._zone(0x01, 0x03)
+        self.assertEqual(['Faulted', 'Alarm memory', 'Bypass memory'],
+                         zone.condition_flags)
+
+    def test_short_frame_has_no_condition_2(self):
+        frame = controller.NXFrame()
+        frame.data = [45, 1, 0, 0, 0, 0x01]
+        self.ctrl.process_msg_4(frame)
+        self.assertEqual(['Faulted'], self.ctrl.zones[46].condition_flags)
+
+    def test_interior_bypassed(self):
+        self._zone(0x08, types=(0x40, 0, 0))   # interior + bypassed
+        self.assertTrue(self.ctrl.interior_bypassed)
+        self._zone(0x00, types=(0x40, 0, 0))
+        self.assertFalse(self.ctrl.interior_bypassed)
